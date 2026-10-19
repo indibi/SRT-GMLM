@@ -1,0 +1,143 @@
+hdr: # Experiment Header
+  project: 'tregs_bcd_synth_exp_v5'
+  group: 'eg1'
+  name: 'ltr_sp_logreg_v5'
+  tags: ['logistic_regression', 'sparse', 'low-trank', 'v5']
+  notes: |
+    # Experiment 1 (v5):
+    ## Sparse and Low-Rank Tensor Logistic Regression
+    Classification accuracy vs. Number of training samples.
+    Model: TuckerRegressorBCD (v5) with RADA v3 factor solvers and L-BFGS core optimization.
+    Control Variables: Sparsity cardinality (4) and ground truth Tucker rank [3, 3, 3].
+
+# ------------- Independent Variable Specification ------
+ivs:
+  variables: ['n_train', 'cardinality']
+  cfg_keys:
+    n_train: ['data.n_train']
+    cardinality:
+      - 'data.cardinalities[0]'
+      - 'data.cardinalities[1]'
+      - 'data.cardinalities[2]'
+  ranges:
+    n_train: [400, 800, 1600, 3200]
+    cardinality: [4]
+
+# ------------- Control Variable Specification ------
+cvs:
+  dims: [30, 30, 30]
+  ranks: [3, 3, 3]
+  cardinality: 4
+  expanded: false
+  seed: ???
+
+# ------------------------ Data Specs ------------------------
+data:
+  regression_type: 'logistic'
+  tensor_type: 'sparse_low_tucker_rank'
+  dims: [30, 30, 30]
+  ranks: [3, 3, 3]
+  cardinalities: ['???', '???', '???']
+  expanded: '${cvs.expanded}'
+  n_samples: 7000
+  n_train: ???
+  n_test: 1000
+  n_val: 0
+  seed: ???
+  dtype: 'double'
+  factor_graphs: [null, null, null]
+
+# ------------------------ Model Specifications ------------------------
+models:
+  tregsbcd_v5:
+    model_name: TuckerBCDRegularizerSearch
+    base_model_cfg: '${base_tucker_rgd_cfg}'
+    feature_ranks: [3, 3, 3]
+    regsearch_args:
+      tau_range: [1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0]
+      ldas_ranges:
+        - [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 5.0e-2, 1.0e-1, 0.5]
+        - [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 5.0e-2, 1.0e-1, 0.5]
+        - [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 5.0e-2, 1.0e-1, 0.5]
+      rada_cfg: '${rada_rgd_cfg}'
+      lbfgs_config: '${lbfgs_cfg}'
+      cross_validate: false
+      val_ratio: 0.2
+      selection_metric: 'val_score'
+      verbosity: 1
+
+  # Benchmark models (evaluated on the exact same splits)
+  lasso:
+    model_name: 'vectorized_lasso'
+    benchmark_cfg:
+      C_range: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0, 10.0, 100.0]
+      max_iter: 1000
+
+  elastic_net:
+    model_name: 'vectorized_elasticnet'
+    benchmark_cfg:
+      C_range: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0, 10.0, 100.0]
+      l1_ratio: 0.5
+      max_iter: 1000
+
+  ridge:
+    model_name: 'vectorized_ridge'
+    benchmark_cfg:
+      C_range: [1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0, 10.0, 100.0]
+      max_iter: 1000
+
+# Base TuckerRegressorBCD (v5) Configuration
+base_tucker_rgd_cfg:
+  regressor:
+    regression_type: 'logistic'
+    feature_dims: '${data.dims}'
+    feature_ranks: ???
+    feature_manifolds:
+      - '${Steifel:${..feature_dims[0]}, ${..feature_ranks[0]}, ${...device}}'
+      - '${Steifel:${..feature_dims[1]}, ${..feature_ranks[1]}, ${...device}}'
+      - '${Steifel:${..feature_dims[2]}, ${..feature_ranks[2]}, ${...device}}'
+  tau: 0.0
+  ldas: [0.0, 0.0, 0.0]
+  thetas: [0.0, 0.0, 0.0]
+  Ds: null
+  Ls: [null, null, null]
+  subproblem_solvers:
+    U_1: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[0]},${mul:${data.dims[0]},${..regressor.feature_ranks[0]}}}'
+    U_2: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[1]},${mul:${data.dims[1]},${..regressor.feature_ranks[1]}}}'
+    U_3: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[2]},${mul:${data.dims[2]},${..regressor.feature_ranks[2]}}}'
+  lbfgs_config: '${lbfgs_cfg}'
+  dataloader_cfg: null
+  verbosity: 0
+  init_with_hosvd_of_grad: true
+  max_it: 150
+  max_time: 3500
+  min_gradient_norm: 1.0e-5
+  device: 'cuda'
+
+# Core Tensor L-BFGS Configuration
+lbfgs_cfg:
+  max_iter: 100
+  tolerance_grad: 1.0e-7
+  tolerance_change: 1.0e-9
+  line_search_fn: 'strong_wolfe'
+
+# Factor Subproblems RADA v3 Configuration
+rada_rgd_cfg:
+  c1: 0.1
+  max_it: 1000
+  Tk: 10
+  max_line_search: 25
+  rho: 1.5
+  tau_1: 0.999
+  tau_2: 0.9
+  zeta: 1.0
+  zeta_BB_min: 1.0e-12
+  zeta_BB_max: 1.0e12
+  eps: 1.0e-8
+  max_time: 1500
+  max_function_evals: 400000
+  verbosity: 0
+  eps_floor: 1.0e-12
+  eps_anneal_factor: 0.1
+  max_it_ceil: 20000
+  max_it_growth: 4

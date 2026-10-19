@@ -1,0 +1,111 @@
+hdr: # Experiment Header
+  project: 'tregs_bcd_synth_exp'
+  group: 'eg1' # Experiment Group
+  name: 'ltr_sp_logreg_c16' # Low Tucker Rank, Sparse Logistic Regression
+  tags: ['logistic_regression', 'sparse', 'low-trank', 'lv1', '${.group}']
+  notes: |
+    # Experiment 1:
+    ## Sparse and Low-rank Tensor Logistic Regression
+    Classification accuracy vs Number of samples.
+    **Control Variables:
+      Sparsity and the Tucker rank of the ground truth regression coefficients.
+# ------------- Independent Variable Specification ------
+ivs:
+  variables: ['n_train', 'cardinality']
+  cfg_keys:
+    n_train: ['data.n_train']
+    cardinality: 
+      -  'data.cardinalities[0]'
+      -  'data.cardinalities[1]'
+      -  'data.cardinalities[2]'
+  ranges:
+    n_train: [400, 800, 1600, 3200]
+    cardinality: [16]
+# ------------- Control Variable Specification ------
+cvs:
+  dims: [30,30,30]
+  ranks: [3,3,3]
+  cardinality: 16
+  expanded: false
+  seed: ???
+# ------------------------ Specs ------------------------
+data:
+  regression_type: 'logistic'
+  tensor_type: 'sparse_low_tucker_rank'
+  dims: [30,30,30]
+  ranks: [3,3,3]
+  cardinalities: ['???','???','???']
+  expanded: '${cvs.expanded}'
+  n_samples: 7000 # Creates 6000 samples, Should be >= than n_train+n_test+n_val (For reproducibility)
+  n_train: ???    # The first [n_train] samples are used for training
+  n_test: 1000    # The last [n_test] samples are used for testing
+  n_val: 0        # The last [n_val] samples before n_test are used for validation
+  seed: ???
+  dtype: 'double'
+  factor_graphs: [null, null, null]
+models: # Model (Family) Specifications
+  tregsbcd1:
+    model_name: TuckerBCDRegularizerSearch
+    base_model_cfg: '${base_tucker_rgd_cfg}'
+    feature_ranks: [3,3,3]
+    regsearch_args:
+      tau_range: [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0, 1.0e1, 1.0e2]
+      ldas_ranges:
+        - [1e-4, 1e-3, 5e-2, 1.0e-2, 5e-1, 1.0e-1, 0.5, 1.0, 5.0, 10, 50, 100]
+        - [1e-4, 1e-3, 5e-2, 1.0e-2, 5e-1, 1.0e-1, 0.5, 1.0, 5.0, 10, 50, 100]
+        - [1e-4, 1e-3, 5e-2, 1.0e-2, 5e-1, 1.0e-1, 0.5, 1.0, 5.0, 10, 50, 100]
+      rada_cfg: '${rada_rgd_cfg}'
+      cross_validate: false
+      k_fold: 10
+      verbosity: 1
+# Base TuckerRegressorBCD Configuration
+base_tucker_rgd_cfg:
+  regressor:
+    regression_type: 'logistic'
+    feature_dims: '${data.dims}'
+    feature_ranks: ??? #'${...feature_ranks}' # In this case, it gets it from the parent (TuckerBCDREgularizerSearch)
+    feature_manifolds:
+      - '${Steifel:${..feature_dims[0]}, ${..feature_ranks[0]}, ${...device}}'
+      - '${Steifel:${..feature_dims[1]}, ${..feature_ranks[1]}, ${...device}}'
+      - '${Steifel:${..feature_dims[2]}, ${..feature_ranks[2]}, ${...device}}'
+  tau: 0.0
+  ldas: [0.0, 0.0, 0.0]
+  lda_core: 0.0
+  thetas: [0.0, 0.0, 0.0]
+  Ds: null
+  Ls: [null, null, null]
+  subproblem_solvers:
+    U_1: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[0]},${mul:${data.dims[0]},${..regressor.feature_ranks[0]}}}'
+    U_2: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[1]},${mul:${data.dims[1]},${..regressor.feature_ranks[1]}}}'
+    U_3: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[2]},${mul:${data.dims[2]},${..regressor.feature_ranks[2]}}}'
+    C: '${init_rada_rgd:${rada_rgd_cfg},${..lda_core},${mul_list:${..regressor.feature_ranks}}}'
+  dataloader_cfg: null
+  main_algorithm: 'BCD_RADA_RGD'
+  verbosity: 0
+  init_with_hosvd_of_grad: true
+  max_it: 400
+  max_time: 3500
+  min_gradient_norm: 1.0e-4
+  device: 'cuda'
+# Base RADA-RGD algorithm configuration
+rada_rgd_cfg:
+  R: ??? # lda*(dim)**0.5 if lda!=0 else 1e-6*(dim)**0.5
+  c1: 0.8
+  max_it: 10000
+  Tk: 100
+  max_line_search: 25
+  beta1: ??? # 0.01*(dim)**0.5,
+  rho: 2.0
+  tau_1: 0.999
+  tau_2: 0.9
+  zeta: 1.0
+  zeta_BB_min: 1e-20
+  zeta_BB_max: 1e20
+  eps: 1e-6
+  max_time:  1000
+  max_function_evals: '${mul:${.max_it},${.Tk},${TWO}}'
+  verbosity: 0
+TWO: 2
+ZERO: 0.0
+
+

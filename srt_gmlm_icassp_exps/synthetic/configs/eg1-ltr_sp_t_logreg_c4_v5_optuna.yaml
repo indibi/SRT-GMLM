@@ -1,0 +1,123 @@
+hdr: # Experiment Header
+  project: 'tregs_bcd_synth_opt'
+  group: 'eg1'
+  name: 'ltr_sp_logreg_c4_opt'
+  tags: ['logistic_regression', 'sparse', 'low-trank', 'optuna']
+  notes: |
+    # Experiment 1 (v5 - Optuna):
+    ## Sparse and Low-Rank Tensor Logistic Regression with Optuna HP Search
+    Classification AU-ROC / accuracy vs. Number of training samples.
+    Models: TuckerRegs, RidgeTuckerRegs, SparseRTuckerRegs (TuckerRegressorBCD).
+    Control Variables: Sparsity cardinalities [4, 4, 30] and ground truth Tucker rank [3, 3, 3].
+    Dimensions: [30, 30, 30].
+
+# ------------- Independent Variable Specification ------
+ivs:
+  variables: ['n_train', 'cardinality']
+  cfg_keys:
+    n_train: ['data.n_train']
+    cardinality:
+      - 'data.cardinalities[0]'
+      - 'data.cardinalities[1]'
+  ranges:
+    n_train: [500, 1000, 1600, 3200]
+    cardinality: [4]
+
+# ------------- Control Variable Specification ------
+cvs:
+  dims: [30, 30, 30]
+  ranks: [3, 3, 3]
+  cardinality: 4
+  expanded: True
+  seed: ???
+
+# ------------------------ Data Specs ------------------------
+data:
+  regression_type: 'logistic'
+  tensor_type: 'sparse_low_tucker_rank'
+  dims: [30, 30, 30]
+  ranks: [3, 3, 3]
+  cardinalities: ['???', '???', 30]
+  expanded: '${cvs.expanded}'
+  n_samples: 7000
+  n_train: ???
+  n_test: 1000
+  n_val: 0
+  seed: ???
+  dtype: 'double'
+  factor_graphs: [null, null, null]
+
+# ------------------------ Model Specifications ------------------------
+models:
+  TuckerRegs:
+    model_name: 'TuckerRegs'
+    optuna_cfg:
+      n_trials: 1
+      metric: 'val_accuracy'
+      direction: 'maximize'
+      cross_validate: false
+      val_ratio: 0.2
+      ranks_ranges:
+        - [3,3] # [1, 5]
+        - [3,3] # [1, 5]
+        - [3,3] # [1, 5]
+      verbosity: 1
+
+  RidgeTuckerRegs:
+    model_name: 'RidgeTuckerRegs'
+    optuna_cfg:
+      n_trials: 15
+      metric: 'val_accuracy'
+      direction: 'maximize'
+      cross_validate: false
+      val_ratio: 0.2
+      ranks_ranges:
+        - [3,3] # [1, 5]
+        - [3,3] # [1, 5]
+        - [3,3] # [1, 5]
+      tau_range: [1.0e-7, 10.0]
+      verbosity: 1
+
+  SparseRTuckerRegs:
+    model_name: 'SparseRTuckerRegs'
+    optuna_cfg:
+      n_trials: 80
+      metric: 'val_accuracy'
+      direction: 'maximize'
+      cross_validate: false
+      val_ratio: 0.2
+      tau_range: [1.0e-7, 10.0]
+      ldas_ranges:
+        - [1.0e-6, 0.5]
+        - [1.0e-6, 0.5]
+        - 0.0
+      verbosity: 1
+
+# Core Tensor L-BFGS Configuration
+lbfgs_cfg:
+  max_iter: 300
+  tolerance_grad: 1.0e-7
+  tolerance_change: 1.0e-9
+  line_search_fn: 'strong_wolfe'
+
+# Factor Subproblems RADA v3 Configuration
+rada_rgd_cfg:
+  c1: 0.1
+  max_it: 1000
+  Tk: 10
+  max_line_search: 25
+  rho: 1.5
+  tau_1: 0.999
+  tau_2: 0.9
+  zeta: 1.0
+  zeta_BB_min: 1.0e-12
+  zeta_BB_max: 1.0e12
+  eps: 1.0e-8
+  max_time: 1500
+  max_function_evals: 400000
+  verbosity: 0
+  eps_floor: 1.0e-12
+  eps_anneal_factor: 0.1
+  max_it_ceil: 10000
+  max_it_growth: 4
+

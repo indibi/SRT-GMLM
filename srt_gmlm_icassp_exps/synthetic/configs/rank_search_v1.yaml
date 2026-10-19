@@ -1,0 +1,32 @@
+project_name: 'tensor_regression'
+group_name: 'rank_search_study'
+config_name: 'rank_search_v1'
+tags: ['rank_search', 'tucker_regressor']
+notes: "Hyperparameter search for Tucker ranks"
+
+# Synthetic data generation settings
+data:
+  regression_type: 'logistic'
+  tensor_type: 'low_tucker_rank' #'sparse_low_tucker_rank'
+  dims: [30, 30, 20]
+  ranks: [3, 3, 3]
+  # cardinalities: [6, 6, 4]
+  n_train: 250
+  n_val: 0
+  n_test: 0
+  seed: 7
+  dtype: 'double'
+  noise_type: 'gaussian'
+  noise_std: 0.1
+  kernel: null
+
+# Model configurations for Tucker Regressor
+models:
+  Tucker:
+    regression_type: 'logistic'
+    dims: [30, 30, 20]
+    ranks: [3, 3, 3]  # Will be overridden by rank search
+    tau: 0.0001
+    ldas: [0.00, 0.00, 0.00]
+    lda_core: 0.0
+    thetas: [0.0, 0.0, 0.0]

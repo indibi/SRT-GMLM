@@ -1,0 +1,89 @@
+#!/bin/bash --login
+#SBATCH --job-name=tregs_optuna_exp
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus=v100:4
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=indibimu@msu.edu
+#SBATCH --output=./slurm_logs/%x-%A_%a.SLURMout
+#SBATCH --error=./slurm_logs/%x-%A_%a.SLURMerr
+#SBATCH --array=0-2
+
+# ------------------------------------------------------------------------------
+# SLURM Job Array for Optuna Tensor Logistic Regression Experiments
+# 3 jobs are submitted via SLURM array with 1 sbatch command.
+# Each job is allocated 4 dedicated V100 GPUs (v100:4) to run:
+#   - Task 0: eg1-ltr_sp_t_logreg_c4_v5_optuna.yaml   (cardinality 4)
+#   - Task 1: eg1-ltr_sp_t_logreg_c8_v5_optuna.yaml   (cardinality 8)
+#   - Task 2: eg1-ltr_sp_t_logreg_c16_v5_optuna.yaml  (cardinality 16)
+#
+# Usage:
+#   sbatch tregs_optuna_exp.sb                        # submits all 3 configs as an array
+#   sbatch --array=0 tregs_optuna_exp.sb              # runs only cardinality 4
+#   sbatch --array="" tregs_optuna_exp.sb <config> <seed> # runs a single job with custom config/seed
+# ------------------------------------------------------------------------------
+
+# Array of configuration files for Experiment 1 (cardinalities 4, 8, 16)
+CONFIGS=(
+    "eg1-ltr_sp_t_logreg_c4_v5_optuna.yaml"
+    "eg1-ltr_sp_t_logreg_c8_v5_optuna.yaml"
+    "eg1-ltr_sp_t_logreg_c16_v5_optuna.yaml"
+)
+
+# Determine config file (from array task ID, or positional argument fallback)
+if [ -n "${SLURM_ARRAY_TASK_ID}" ]; then
+    CONFIG="${CONFIGS[$SLURM_ARRAY_TASK_ID]}"
+else
+    CONFIG="${1:-eg1-ltr_sp_t_logreg_c4_v5_optuna.yaml}"
+fi
+
+# Ensure SLURM logs directory exists
+mkdir -p ./slurm_logs
+
+echo "================================================================================"
+echo "Job Name:              ${SLURM_JOB_NAME}"
+echo "Job ID:                ${SLURM_JOB_ID} (Array: ${SLURM_ARRAY_JOB_ID:-N/A}_${SLURM_ARRAY_TASK_ID:-N/A})"
+echo "Node:                  $(hostname)"
+echo "Config File:           ${CONFIG}"
+echo "CUDA_VISIBLE_DEVICES:  ${CUDA_VISIBLE_DEVICES}"
+echo "Start Time:            $(date)"
+echo "================================================================================"
+
+# Purge current modules and load required environment
+module purge
+module load powertools CUDA/12.6.0
+source /mnt/research/ATD/tensor_regression/t-regs/.venv/bin/activate
+
+cd /mnt/research/ATD/tensor_regression/experiments/synthetic
+
+# Determine seed and forward extra arguments
+# Checks positional argument or SEED env var, defaults to 8
+if [ -n "$1" ]; then
+    if [[ "$1" == *.yaml ]]; then
+        CONFIG="$1"
+        SEED="${2:-${SEED:-8}}"
+        EXTRA_ARGS=("${@:3}")
+    else
+        SEED="$1"
+        EXTRA_ARGS=("${@:2}")
+    fi
+else
+    SEED="${SEED:-8}"
+    EXTRA_ARGS=("$@")
+fi
+
+echo "Running Optuna Experiment Suite with Config: ${CONFIG}, Seed(s): ${SEED}"
+echo "Extra Arguments: ${EXTRA_ARGS[*]}"
+
+# Run the Optuna experiment runner with the 4 allocated V100 GPUs
+python tregs_optuna_exp.py --config "${CONFIG}" --seeds "${SEED}" "${EXTRA_ARGS[@]}"
+
+# Print resource information
+scontrol show job "${SLURM_JOB_ID}"
+js -j "${SLURM_JOB_ID}"
+
+echo "Finished at: $(date)"
+

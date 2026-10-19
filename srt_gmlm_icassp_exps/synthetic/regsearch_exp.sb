@@ -1,0 +1,46 @@
+#!/bin/bash --login
+#SBATCH --job-name=gmlm_regsearch_exp1
+#SBATCH --nodes=1
+#SBATCH --ntasks=3
+#SBATCH --ntasks-per-node=3
+#SBATCH --cpus-per-task=5
+#SBATCH --gpus=v100:4
+#SBATCH --mem=40G
+#SBATCH --time=10:00:00
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=indibimu@msu.edu
+
+# Standard output and error to file
+# %x: job name, %j: job ID
+#SBATCH --output=./slurm_logs/%x-%j.SLURMout
+
+
+# Purge current modules and load those we require
+module purge
+module load powertools CUDA/12.6.0
+source /mnt/research/ATD/tensor_regression/t-regs/.venv/bin/activate
+
+cd /mnt/research/ATD/tensor_regression/experiments/synthetic
+
+
+srun --overlap --ntasks=1 --cpus-per-task=5 \
+    --output="./slurm_logs/output-%j-%s.out" \
+    --error="./slurm_logs/error-%j-%s.err" \
+    python tregs_bcd_w_regsearch_exp.py --config eg1-ltr_sp_t_logreg_c16.yaml --seeds 8 &
+
+srun --overlap --ntasks=1 --cpus-per-task=5 \
+    --output="./slurm_logs/output-%j-%s.out" \
+    --error="./slurm_logs/error-%j-%s.err" \
+    python tregs_bcd_w_regsearch_exp.py --config eg1-ltr_sp_t_logreg_c8.yaml --seeds 8 &
+
+srun --overlap --ntasks=1 --cpus-per-task=5 \
+    --output="./slurm_logs/output-%j-%s.out" \
+    --error="./slurm_logs/error-%j-%s.err" \
+    python tregs_bcd_w_regsearch_exp.py --config eg1-ltr_sp_t_logreg.yaml --seeds 8 &
+
+# Print resource information
+scontrol show job $SLURM_JOB_ID
+js -j $SLURM_JOB_ID
+
+wait
+

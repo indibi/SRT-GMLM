@@ -1,0 +1,129 @@
+seed: 1
+# Study configuration
+study_header:
+  project_name: 'tensor_regression'
+  group_name: 'exp_1'
+  config_name: 'study_1_lowrank'
+  study_name: '${.config_name}-s${seed}'
+  storage: sqlite:///${.results_dir}/${.group_name}.db
+  results_dir: results
+  tags: ['model_selection_study', 'trank_search', 'sparsity_search']
+  notes: |
+    # Study-1.a:
+    ## Structured Tucker Regressor Learning Model Selection Study
+
+    ### Questions of the Study:
+    * Question 1:
+      Does Validation or Cross-validaiton scores allow us to select the right
+      tucker rank?
+    * Question 2:
+      Does Cross-validation offer better performance for selecting the correct rank?
+study_config:
+  directions: ['maximize']
+  sampler: '${GridSampler: ${oc.create:${.sampler_cfg}}}'
+  pruner: null
+  objective_config:
+    objective_names:
+      - 'val_accuracy'
+    distributions:
+      trank:
+        type: int # 'int' | 'float' | 'categorical'
+        kwargs:
+          low: 1
+          high: 8
+          log: false
+          step: 1
+      # lda:
+      #   type: float
+      #   kwargs:
+      #     low: 1.0e-6
+      #     high: 1.0e+1
+      #     log: true
+    split:
+      type: 'k-fold'
+      n_splits: 4
+    hp_to_model_cfg_keys:
+      trank:
+        - regressor.feature_ranks[0]
+        - regressor.feature_ranks[1]
+        - regressor.feature_ranks[2]
+      # lda:
+      #   - ldas[0]
+      #   - ldas[1]
+      #   - ldas[2]
+  sampler_cfg:
+    search_space:
+      trank: [1, 2, 3, 4, 5, 6, 7]
+      # lda: [1.0e-8, 1.0e-7, 1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0e+0, 1.0e+1]
+    seed: 1
+  n_trials: 7
+  pruner_cfg: null
+# Synthetic data configuration
+data:
+  regression_type: 'logistic'
+  tensor_type: 'sparse_low_tucker_rank'
+  dims: [30,30,30]
+  ranks: [3,3,3]
+  cardinalities: [10, 10, 10]
+  n_train: 1200
+  seed: ${seed}
+  dtype: 'double'
+  factor_graphs: [null, null, null]
+# Model configuration
+model_cfg:
+  model_name: LR-Tucker
+  regressor:
+    regression_type: 'logistic'
+    feature_dims: '${data.dims}'
+    feature_ranks:
+      - ???
+      - ???
+      - ???
+    feature_manifolds:
+      - '${Steifel:${..feature_dims[0]}, ${..feature_ranks[0]}, ${...device}}'
+      - '${Steifel:${..feature_dims[1]}, ${..feature_ranks[1]}, ${...device}}'
+      - '${Steifel:${..feature_dims[2]}, ${..feature_ranks[2]}, ${...device}}'
+  tau: 0.0
+  ldas:
+    - 0.0
+    - 0.0
+    - 0.0
+  lda_core: 0.0
+  thetas: [0.0, 0.0, 0.0]
+  Ds: null
+  Ls: [null, null, null]
+  subproblem_solvers:
+    U_1: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[0]},${mul:${data.dims[0]},${..regressor.feature_ranks[0]}}}'
+    U_2: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[1]},${mul:${data.dims[1]},${..regressor.feature_ranks[1]}}}'
+    U_3: '${init_rada_rgd:${rada_rgd_cfg},${..ldas[2]},${mul:${data.dims[2]},${..regressor.feature_ranks[2]}}}'
+    C: '${init_rada_rgd:${rada_rgd_cfg},${..lda_core},${mul_list:${..regressor.feature_ranks}}}'
+  dataloader_cfg: null
+  main_algorithm: 'BCD_RADA_RGD'
+  verbosity: 2
+  init_with_hosvd_of_grad: true
+  max_it: 80
+  max_time: 32132123132132
+  min_gradient_norm: 1.0e-5
+  device: 'cuda'
+# RADA_RGD Solver config
+rada_rgd_cfg:
+  R: ??? # lda*(dim)**0.5 if lda!=0 else 1e-6*(dim)**0.5
+  c1: 1.0e-1
+  max_it: 400
+  Tk: 5
+  max_line_search: 25
+  beta1: ??? # 0.01*(dim)**0.5,
+  rho: 2.0
+  tau_1: 0.999
+  tau_2: 0.9
+  zeta: 1.0
+  zeta_BB_min: 1e-20
+  zeta_BB_max: 1e20
+  eps: 1e-6
+  max_time:  null
+  max_function_evals: '${mul:${.max_it},${.Tk},${TWO}}'
+  verbosity: 0
+TWO: 2
+# TODO: Get rid of eval:
+# TODO: add resolver for the rada_rgd_cfg
+# TODO: 

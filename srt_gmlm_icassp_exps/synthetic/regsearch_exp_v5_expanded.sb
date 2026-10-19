@@ -1,0 +1,76 @@
+#!/bin/bash --login
+#SBATCH --job-name=tregs_v5_regsearch
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus=v100:4
+#SBATCH --mem=64G
+#SBATCH --time=11:00:00
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=indibimu@msu.edu
+#SBATCH --output=./slurm_logs/%x-%A_%a.SLURMout
+#SBATCH --error=./slurm_logs/%x-%A_%a.SLURMerr
+#SBATCH --array=0-2
+
+# ------------------------------------------------------------------------------
+# 3 jobs are submitted via SLURM array with 1 sbatch command.
+# Each of the 3 jobs is guaranteed 4 dedicated GPUs (v100:4 or h200:4).
+# ------------------------------------------------------------------------------
+
+# Array of configuration files for Experiment 1 (cardinalities 4, 8, 16)
+# "eg1-ltr_sp_t_logreg_v5_expanded.yaml"
+# "eg1-ltr_sp_t_logreg_c8_v5_expanded.yaml"
+# "eg1-ltr_sp_t_logreg_c16_v5_expanded.yaml"
+CONFIGS=(
+    "eg1-spltr_logreg_c4.yaml"
+    "eg1-spltr_logreg_c8.yaml"
+    "eg1-spltr_logreg_c16.yaml"
+)
+
+# Determine config file (from array task ID, or positional argument fallback)
+if [ -n "${SLURM_ARRAY_TASK_ID}" ]; then
+    CONFIG="${CONFIGS[$SLURM_ARRAY_TASK_ID]}"
+else
+    CONFIG="${1:-eg1-ltr_sp_t_logreg_v5_expanded.yaml}"
+fi
+
+# Ensure SLURM logs directory exists
+mkdir -p ./slurm_logs
+
+echo "================================================================================"
+echo "Job Name:              ${SLURM_JOB_NAME}"
+echo "Job ID:                ${SLURM_JOB_ID} (Array: ${SLURM_ARRAY_JOB_ID:-N/A}_${SLURM_ARRAY_TASK_ID:-N/A})"
+echo "Node:                  $(hostname)"
+echo "Config File:           ${CONFIG}"
+echo "CUDA_VISIBLE_DEVICES:  ${CUDA_VISIBLE_DEVICES}"
+echo "Start Time:            $(date)"
+echo "================================================================================"
+
+# Purge current modules and load required environment
+module purge
+module load powertools CUDA/12.6.0
+source /mnt/research/ATD/tensor_regression/t-regs/.venv/bin/activate
+
+cd /mnt/research/ATD/tensor_regression/experiments/synthetic
+
+# Determine seed (checks $1 positional argument, or SEED env var, defaults to positive 8)
+# Note: In bash, "${VAR:-8}" means "if VAR is unset, default to 8". It is positive 8, not -8.
+if [ -n "$1" ]; then
+    if [[ "$1" == *.yaml ]]; then
+        CONFIG="$1"
+        SEED="${2:-${SEED:-8}}"
+    else
+        SEED="$1"
+    fi
+else
+    SEED="${SEED:-8}"
+fi
+
+# Run the v5 experiment runner with 4 GPUs allocated to this job
+python tregs_bcd_v5_w_regsearch_exp.py --config "${CONFIG}" --seeds "${SEED}"
+
+# Print resource information
+scontrol show job "${SLURM_JOB_ID}"
+js -j "${SLURM_JOB_ID}"
+
+echo "Finished at: $(date)"
